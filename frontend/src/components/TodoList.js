@@ -28,6 +28,7 @@ const TodoList = () => {
             placeholder="Add a new todo"
             style={{ marginRight: "10px", padding: "5px", width: "70%" }}
           />
+
           <button type="submit" style={{ padding: "5px 10px" }}>
             Add
           </button>
@@ -48,7 +49,13 @@ const TodoList = () => {
                 }
                 style={{ marginRight: "10px" }}
               />
-              {todo.title}
+              <span
+                style={{
+                  textDecoration: todo.completed ? "line-through" : "none", // Gạch ngang nếu todo đã hoàn thành
+                }}
+              >
+                {todo.title}
+              </span>
               <button
                 onClick={() => deleteMutation.mutate(todo._id)}
                 style={{ marginLeft: "10px", padding: "2px 8px" }}

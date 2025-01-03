@@ -12,7 +12,10 @@ export const addTodo = async (todo) => {
   return response.data;
 };
 
-export const updateTodo = async (id, updates) => {
+export const updateTodo = async ({ id, updates }) => {
+  console.log("id:", id);
+  console.log("update:", updates);
+
   const response = await axios.put(`${API_URL}/${id}`, updates);
   return response.data;
 };

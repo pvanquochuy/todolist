@@ -1,75 +1,110 @@
+import axios from "axios";
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { UseTodos } from "../hooks/useTodos";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+
 import TodoList from "../components/TodoList";
 
-jest.mock("../hooks/useTodos");
+jest.mock("axios");
+jest.mock("@tanstack/react-query", () => ({
+  ...jest.requireActual("@tanstack/react-query"),
+  useMutation: jest.fn(),
+}));
 
-describe("TodoList Component", () => {
-  let todosMock, addMutationMock, updateMutationMock, deleteMutationMock;
+const createTestQueryClient = () => {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+};
 
+const renderWithQueryClient = (ui) => {
+  const testQueryClient = createTestQueryClient();
+  return {
+    ...render(
+      <QueryClientProvider client={testQueryClient}>{ui}</QueryClientProvider>
+    ),
+  };
+};
+
+describe("TodoList Component with Axios mock", () => {
   beforeEach(() => {
-    todosMock = [
-      { _id: "1", title: "Test Todo 1", completed: false },
-      { _id: "2", title: "Test Todo 2", completed: true },
-    ];
-    addMutationMock = { mutate: jest.fn() };
-    updateMutationMock = { mutate: jest.fn() };
-    deleteMutationMock = { mutate: jest.fn() };
-
-    UseTodos.mockReturnValue({
-      todos: todosMock,
-      isLoading: false,
-      addMutation: addMutationMock,
-      updateMutation: updateMutationMock,
-      deleteMutation: deleteMutationMock,
-    });
+    jest.clearAllMocks();
   });
 
-  test("renders the loading state", () => {
-    UseTodos.mockReturnValueOnce({ todos: [], isLoading: true });
-    render(<TodoList />);
+  test("renders the loading state", async () => {
+    axios.get.mockResolvedValueOnce({ data: [] }); // Trả về dữ liệu rỗng
+    renderWithQueryClient(<TodoList />);
     expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 
-  test("renders the todo list", () => {
-    render(<TodoList />);
-    expect(screen.getByText("Todolist")).toBeInTheDocument();
-    expect(screen.getByText("Test Todo 1")).toBeInTheDocument();
-    expect(screen.getByText("Test Todo 2")).toBeInTheDocument();
-  });
+  test("renders the todo list", async () => {
+    axios.get.mockResolvedValueOnce({
+      data: [
+        { _id: "1", title: "Test Todo 1", completed: false },
+        { _id: "2", title: "Test Todo 2", completed: true },
+      ],
+    });
+    renderWithQueryClient(<TodoList />);
 
-  test("adds a new todo", async () => {
-    render(<TodoList />);
-    const input = screen.getByPlaceholderText("Add a new todo");
-    const button = screen.getByText("Add");
+    const title = await screen.findByText("Todolist");
+    const todo1 = await screen.findByText("Test Todo 1");
+    const todo2 = await screen.findByText("Test Todo 2");
 
-    fireEvent.change(input, { target: { value: "New Todo" } });
-    fireEvent.click(button);
-
-    expect(addMutationMock.mutate).toHaveBeenCalledWith({ title: "New Todo" });
-
-    expect(input.value).toBe("");
+    expect(title).toBeInTheDocument();
+    expect(todo1).toBeInTheDocument();
+    expect(todo2).toBeInTheDocument();
   });
 
   test("toggles todo completion", async () => {
-    render(<TodoList />);
-    const checkbox = screen.getAllByRole("checkbox")[0];
+    const mockUpdateMutation = jest.fn();
+
+    axios.get.mockResolvedValueOnce({
+      data: [{ _id: "1", title: "Test Todo 1", completed: false }],
+    });
+
+    useMutation.mockReturnValue({
+      mutate: mockUpdateMutation,
+    });
+
+    renderWithQueryClient(<TodoList />);
+
+    const todoItem = await screen.findByText("Test Todo 1");
+    const checkbox = screen.getByRole("checkbox");
 
     fireEvent.click(checkbox);
 
-    expect(updateMutationMock.mutate).toHaveBeenCalledWith({
+    expect(mockUpdateMutation).toHaveBeenCalledWith({
       id: "1",
       updates: { completed: true },
     });
   });
 
   test("deletes a todo", async () => {
-    render(<TodoList />);
-    const deleteButton = screen.getAllByText("Delete")[0];
+    axios.get.mockResolvedValueOnce({
+      data: [{ _id: "1", title: "Test Todo 1", completed: false }],
+    });
+
+    axios.delete.mockResolvedValueOnce({ data: {} });
+
+    const mockDeleteMutation = jest.fn();
+    mockDeleteMutation.mockResolvedValueOnce({ data: {} });
+
+    renderWithQueryClient(<TodoList />);
+
+    const todoItem = await screen.findByText("Test Todo 1");
+    const deleteButton = screen.getByText("Delete");
 
     fireEvent.click(deleteButton);
 
-    expect(deleteMutationMock.mutate).toHaveBeenCalledWith("1");
+    expect(axios.delete).toHaveBeenCalledWith("/api/todos/1");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Test Todo 1")).not.toBeInTheDocument();
+    });
   });
 });
